@@ -1,3 +1,16 @@
+use core::fmt;
+
+const RECURSION_LIMIT: u8 = 25;
+
+#[derive(Debug, Clone)]
+pub struct RecursionLimitReachedError;
+
+impl fmt::Display for RecursionLimitReachedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "recursion limit reached")
+    }
+}
+
 #[derive(Debug)]
 pub struct TemplateSplit<'a> {
     pub prefix: &'a str,
@@ -8,6 +21,7 @@ pub struct TemplateSplit<'a> {
 pub struct TextInterpolator {
     pub is_template: fn(&str) -> bool,
     pub extract_template: fn(&str) -> TemplateSplit,
+    times_recursed: u8,
 }
 
 impl TextInterpolator {
@@ -15,10 +29,15 @@ impl TextInterpolator {
         TextInterpolator {
             is_template,
             extract_template,
+            times_recursed: 0,
         }
     }
 
-    pub fn interp(&self, text: &str, map: &impl Fn(&str) -> Option<String>) -> String {
+    pub fn interp(
+        &mut self,
+        text: &str,
+        map: &impl Fn(&str) -> Option<String>,
+    ) -> Result<String, RecursionLimitReachedError> {
         let mut output = String::with_capacity(text.len());
 
         for item in text.split_whitespace() {
@@ -27,9 +46,14 @@ impl TextInterpolator {
 
             match map(template_split.template) {
                 Some(substitute) => {
+                    if self.times_recursed >= RECURSION_LIMIT {
+                        self.times_recursed = 0;
+                        return Err(RecursionLimitReachedError);
+                    }
                     substitution = substitute;
                     while self.contains_template(&substitution) {
-                        substitution = self.interp(&substitution, map);
+                        self.times_recursed += 1;
+                        substitution = self.interp(&substitution, map)?;
                     }
                     substitution =
                         template_split.prefix.to_owned() + &substitution + template_split.suffix;
@@ -43,7 +67,9 @@ impl TextInterpolator {
             output.push(' ');
         }
 
-        String::from(output.trim())
+        self.times_recursed = 0;
+
+        Ok(output.trim().to_string())
     }
 
     pub fn contains_template(&self, text: &str) -> bool {
@@ -99,11 +125,6 @@ pub fn extract_template<'a>(embedded_template: &'a str) -> TemplateSplit<'a> {
 mod tests {
     use super::*;
 
-    const INTERPOLATOR: TextInterpolator = TextInterpolator {
-        is_template,
-        extract_template,
-    };
-
     fn map_template(template: &str) -> Option<String> {
         match template {
             "verb" => Some(["run", "fall", "fly", "swim"][0].to_string()),
@@ -118,81 +139,107 @@ mod tests {
                 .to_string(),
             ),
             "paragraph" => Some(["'sentence 'sentence 'sentence"][0].to_string()),
+            "infinite" => Some("'infinite".to_string()),
             _ => None,
         }
     }
 
     #[test]
     fn interpolate_standard_text() {
+        let mut interpolator = TextInterpolator::new();
+
         let text: String = String::from(
             "This is an example of a basic input with no templates to be substituted.",
         );
-        let interpolated_text = INTERPOLATOR.interp(&text, &map_template);
+        let interpolated_text = interpolator.interp(&text, &map_template);
 
         dbg!(&interpolated_text);
 
-        assert_eq!(&text, &interpolated_text);
+        assert_eq!(&text, &interpolated_text.unwrap());
     }
 
     #[test]
     fn interpolate_templated_text() {
+        let mut interpolator = TextInterpolator::new();
+
         let text: String = String::from("A 'adj 'noun will always 'verb in the morning.");
-        let interpolated_text = INTERPOLATOR.interp(&text, &map_template);
+        let interpolated_text = interpolator.interp(&text, &map_template);
 
         dbg!(&interpolated_text);
 
-        assert!(!INTERPOLATOR.contains_template(&interpolated_text));
+        assert!(!interpolator.contains_template(&interpolated_text.unwrap()));
     }
 
     #[test]
     fn interpolate_templated_text_2() {
+        let mut interpolator = TextInterpolator::new();
+
         let text: String = String::from("I'm 'verb'ing on some 'adj 'noun's right now.");
-        let interpolated_text = INTERPOLATOR.interp(&text, &map_template);
+        let interpolated_text = interpolator.interp(&text, &map_template);
 
         dbg!(&interpolated_text);
 
-        assert!(!INTERPOLATOR.contains_template(&interpolated_text));
+        assert!(!interpolator.contains_template(&interpolated_text.unwrap()));
     }
 
     #[test]
     fn interpolated_nested_templated_text() {
+        let mut interpolator = TextInterpolator::new();
+
         let text: String = String::from("'sentence");
-        let interpolated_text = INTERPOLATOR.interp(&text, &map_template);
+        let interpolated_text = interpolator.interp(&text, &map_template);
         dbg!(&interpolated_text);
 
-        assert!(!INTERPOLATOR.contains_template(&interpolated_text));
+        assert!(!interpolator.contains_template(&interpolated_text.unwrap()));
     }
 
     #[test]
     fn interpolated_double_nested_templated_text() {
+        let mut interpolator = TextInterpolator::new();
+
         let text: String = String::from("'paragraph");
-        let interpolated_text = INTERPOLATOR.interp(&text, &map_template);
+        let interpolated_text = interpolator.interp(&text, &map_template);
 
         dbg!(&interpolated_text);
 
-        assert!(!INTERPOLATOR.contains_template(&interpolated_text));
+        assert!(!interpolator.contains_template(&interpolated_text.unwrap()));
     }
 
     #[test]
     fn interpolated_double_nested_templated_text_with_prefix_and_suffix() {
+        let mut interpolator = TextInterpolator::new();
+
         let text: String = String::from("My Story:'paragraph...");
 
-        let interpolated_text = INTERPOLATOR.interp(&text, &map_template);
+        let interpolated_text = interpolator.interp(&text, &map_template);
 
         dbg!(&interpolated_text);
 
-        assert!(!INTERPOLATOR.contains_template(&interpolated_text));
+        assert!(!interpolator.contains_template(&interpolated_text.unwrap()));
     }
 
     #[test]
     fn missing_template() {
+        let mut interpolator = TextInterpolator::new();
+
         let text: String = String::from("'klsfjkaejfaeskfjl");
 
-        let interpolated_text = INTERPOLATOR.interp(&text, &map_template);
+        let interpolated_text = interpolator.interp(&text, &map_template);
 
         dbg!(&interpolated_text);
 
-        assert_eq!("'klsfjkaejfaeskfjl", &interpolated_text);
+        assert_eq!("'klsfjkaejfaeskfjl", &interpolated_text.unwrap());
+    }
+
+    #[test]
+    fn infinite_self_recursion() {
+        let mut interpolator = TextInterpolator::new();
+
+        let text: String = String::from("'infinite");
+
+        let interpolated_text = interpolator.interp(&text, &map_template);
+
+        assert!(&interpolated_text.is_err());
     }
 
     #[test]
