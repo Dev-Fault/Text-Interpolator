@@ -99,7 +99,11 @@ pub fn extract_template<'a>(embedded_template: &'a str) -> TemplateSplit<'a> {
             Some(inner_split) => {
                 prefix = split.0;
                 template = inner_split.0;
-                suffix = inner_split.1;
+                if inner_split.1.is_empty() {
+                    suffix = &split.1[split.1.len() - 1..];
+                } else {
+                    suffix = inner_split.1;
+                }
             }
             None => {
                 prefix = split.0;
@@ -267,5 +271,32 @@ mod tests {
         assert_eq!("", extrated_template.prefix);
         assert_eq!("", extrated_template.suffix);
         assert_eq!("", extrated_template.template);
+    }
+
+    #[test]
+    fn template_extration_4() {
+        let extrated_template = extract_template("'noun.");
+        dbg!(&extrated_template);
+        assert_eq!("", extrated_template.prefix);
+        assert_eq!(".", extrated_template.suffix);
+        assert_eq!("noun", extrated_template.template);
+    }
+
+    #[test]
+    fn template_extration_5() {
+        let extrated_template = extract_template("'noun!");
+        dbg!(&extrated_template);
+        assert_eq!("", extrated_template.prefix);
+        assert_eq!("!", extrated_template.suffix);
+        assert_eq!("noun", extrated_template.template);
+    }
+
+    #[test]
+    fn template_extration_6() {
+        let extrated_template = extract_template("'noun");
+        dbg!(&extrated_template);
+        assert_eq!("", extrated_template.prefix);
+        assert_eq!("", extrated_template.suffix);
+        assert_eq!("noun", extrated_template.template);
     }
 }
