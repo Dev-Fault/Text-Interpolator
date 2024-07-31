@@ -299,4 +299,13 @@ mod tests {
         assert_eq!("", extrated_template.suffix);
         assert_eq!("noun", extrated_template.template);
     }
+
+    #[test]
+    fn template_extration_7() {
+        let extrated_template = extract_template("'noun'noun");
+        dbg!(&extrated_template);
+        assert_eq!("", extrated_template.prefix);
+        assert_eq!("noun", extrated_template.suffix);
+        assert_eq!("noun", extrated_template.template);
+    }
 }
