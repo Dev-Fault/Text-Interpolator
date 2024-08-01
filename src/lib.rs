@@ -38,6 +38,11 @@ impl TextInterpolator {
         text: &str,
         map: &impl Fn(&str) -> Option<String>,
     ) -> Result<String, RecursionLimitReachedError> {
+        if self.times_recursed >= RECURSION_LIMIT {
+            self.times_recursed = 0;
+            return Err(RecursionLimitReachedError);
+        }
+
         let mut output = String::with_capacity(text.len());
 
         for item in text.split_whitespace() {
@@ -46,12 +51,8 @@ impl TextInterpolator {
 
             match map(template_split.template) {
                 Some(substitute) => {
-                    if self.times_recursed >= RECURSION_LIMIT {
-                        self.times_recursed = 0;
-                        return Err(RecursionLimitReachedError);
-                    }
                     substitution = substitute;
-                    while self.contains_template(&substitution) {
+                    if self.contains_template(&substitution) {
                         self.times_recursed += 1;
                         substitution = self.interp(&substitution, map)?;
                     }
@@ -144,6 +145,7 @@ mod tests {
             ),
             "paragraph" => Some(["'sentence 'sentence 'sentence"][0].to_string()),
             "infinite" => Some("'infinite".to_string()),
+            "nonexistantnest" => Some("'nothing".to_string()),
             _ => None,
         }
     }
@@ -295,6 +297,7 @@ mod tests {
     fn template_extration_6() {
         let extrated_template = extract_template("'noun");
         dbg!(&extrated_template);
+
         assert_eq!("", extrated_template.prefix);
         assert_eq!("", extrated_template.suffix);
         assert_eq!("noun", extrated_template.template);
@@ -307,5 +310,12 @@ mod tests {
         assert_eq!("", extrated_template.prefix);
         assert_eq!("noun", extrated_template.suffix);
         assert_eq!("noun", extrated_template.template);
+    }
+
+    #[test]
+    fn non_existant_nested_template_recursion() {
+        let mut interpolator = TextInterpolator::new();
+        let interp_text = interpolator.interp("'nonexistantnest", &map_template);
+        dbg!(interp_text.unwrap());
     }
 }
