@@ -41,6 +41,16 @@ pub struct TextInterpolator {
 }
 
 impl Default for TextInterpolator {
+    /// Creates a TextInterpolator with a default is_template function and default extract_template
+    /// function
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use text_interpolator::TextInterpolator;
+    ///
+    /// let text_interpolator = TextInterpolator::default();
+    /// ```
     fn default() -> Self {
         TextInterpolator {
             is_template: defaults::is_template,
