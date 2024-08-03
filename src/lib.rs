@@ -83,6 +83,7 @@ impl TextInterpolator {
                         .template_set
                         .insert(template_split.template.to_string())
                     {
+                        self.template_set.clear();
                         return Err(NestedTemplateLoopError);
                     }
 
