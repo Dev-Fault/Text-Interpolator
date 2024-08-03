@@ -17,7 +17,7 @@ pub struct NestedTemplateLoopError;
 
 impl fmt::Display for NestedTemplateLoopError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "detected looping nested templates")
+        write!(f, "detected infinitely looping nested templates")
     }
 }
 
