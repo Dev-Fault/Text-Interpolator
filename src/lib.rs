@@ -1,3 +1,16 @@
+//! # Text Interpolator
+//!
+//! `text_interpolator` is an object that takes input text that possibly contains templates (user
+//! configurable) and maps them to substitutions.
+//! To do so it uses modular functions to check if a word in the text is a
+//! template, extract it, and then map it to it's substitute.
+//!
+//! It also supports nested templates requiring recursion to reach a valid substitute. However, it
+//! enforces a strict recursion limit to prevent complex nested structures from infinitely
+//! recursing.
+
+pub mod defaults;
+
 use core::fmt;
 
 const RECURSION_LIMIT: u8 = 25;
@@ -27,8 +40,8 @@ pub struct TextInterpolator {
 impl TextInterpolator {
     pub fn new() -> Self {
         TextInterpolator {
-            is_template,
-            extract_template,
+            is_template: defaults::is_template,
+            extract_template: defaults::extract_template,
             times_recursed: 0,
         }
     }
@@ -83,49 +96,6 @@ impl TextInterpolator {
     }
 }
 
-pub fn is_template(text: &str) -> bool {
-    match text.chars().next() {
-        Some(c) => c == '\'',
-        None => false,
-    }
-}
-
-pub fn extract_template<'a>(embedded_template: &'a str) -> TemplateSplit<'a> {
-    let prefix: &str;
-    let template: &str;
-    let suffix: &str;
-
-    match embedded_template.split_once('\'') {
-        Some(split) => match split.1.split_once(|ch: char| !ch.is_alphanumeric()) {
-            Some(inner_split) => {
-                prefix = split.0;
-                template = inner_split.0;
-                if inner_split.1.is_empty() {
-                    suffix = &split.1[split.1.len() - 1..];
-                } else {
-                    suffix = inner_split.1;
-                }
-            }
-            None => {
-                prefix = split.0;
-                template = split.1;
-                suffix = "";
-            }
-        },
-        None => {
-            prefix = "";
-            template = "";
-            suffix = "";
-        }
-    };
-
-    TemplateSplit {
-        prefix,
-        template,
-        suffix,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,7 +108,7 @@ mod tests {
             "sentence" => Some(
                 [
                     "A 'adj 'noun should never 'verb..",
-                    "I've never seen someone 'verb on a 'noun before.",
+                    "I've never seen someone 'verb with a 'noun before.",
                     "You are too 'adj to be 'adj..",
                 ][1]
                 .to_string(),
@@ -151,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn interpolate_standard_text() {
+    fn interpolate_non_templated_text() {
         let mut interpolator = TextInterpolator::new();
 
         let text: String = String::from(
@@ -238,6 +208,13 @@ mod tests {
     }
 
     #[test]
+    fn missing_nested_template() {
+        let mut interpolator = TextInterpolator::new();
+        let interp_text = interpolator.interp("'nonexistantnest", &map_template);
+        dbg!(interp_text.unwrap());
+    }
+
+    #[test]
     fn infinite_self_recursion() {
         let mut interpolator = TextInterpolator::new();
 
@@ -246,76 +223,5 @@ mod tests {
         let interpolated_text = interpolator.interp(&text, &map_template);
 
         assert!(&interpolated_text.is_err());
-    }
-
-    #[test]
-    fn template_extration() {
-        let extrated_template = extract_template("['adj.'..'.]");
-        dbg!(&extrated_template);
-        assert_eq!("[", extrated_template.prefix);
-        assert_eq!("'..'.]", extrated_template.suffix);
-        assert_eq!("adj", extrated_template.template);
-    }
-
-    #[test]
-    fn template_extration_2() {
-        let extrated_template = extract_template("'noun's");
-        dbg!(&extrated_template);
-        assert_eq!("", extrated_template.prefix);
-        assert_eq!("s", extrated_template.suffix);
-        assert_eq!("noun", extrated_template.template);
-    }
-
-    #[test]
-    fn template_extration_3() {
-        let extrated_template = extract_template("noun");
-        dbg!(&extrated_template);
-        assert_eq!("", extrated_template.prefix);
-        assert_eq!("", extrated_template.suffix);
-        assert_eq!("", extrated_template.template);
-    }
-
-    #[test]
-    fn template_extration_4() {
-        let extrated_template = extract_template("'noun.");
-        dbg!(&extrated_template);
-        assert_eq!("", extrated_template.prefix);
-        assert_eq!(".", extrated_template.suffix);
-        assert_eq!("noun", extrated_template.template);
-    }
-
-    #[test]
-    fn template_extration_5() {
-        let extrated_template = extract_template("'noun!");
-        dbg!(&extrated_template);
-        assert_eq!("", extrated_template.prefix);
-        assert_eq!("!", extrated_template.suffix);
-        assert_eq!("noun", extrated_template.template);
-    }
-
-    #[test]
-    fn template_extration_6() {
-        let extrated_template = extract_template("'noun");
-        dbg!(&extrated_template);
-
-        assert_eq!("", extrated_template.prefix);
-        assert_eq!("", extrated_template.suffix);
-        assert_eq!("noun", extrated_template.template);
-    }
-
-    #[test]
-    fn template_extration_7() {
-        let extrated_template = extract_template("'noun'noun");
-        dbg!(&extrated_template);
-        assert_eq!("", extrated_template.prefix);
-        assert_eq!("noun", extrated_template.suffix);
-        assert_eq!("noun", extrated_template.template);
-    }
-
-    #[test]
-    fn non_existant_nested_template_recursion() {
-        let mut interpolator = TextInterpolator::new();
-        let interp_text = interpolator.interp("'nonexistantnest", &map_template);
-        dbg!(interp_text.unwrap());
     }
 }
