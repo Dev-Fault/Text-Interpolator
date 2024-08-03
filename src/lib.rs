@@ -79,6 +79,7 @@ impl TextInterpolator {
             return Err(RecursionLimitReachedError);
         }
 
+        // String will be at least as long as input
         let mut output = String::with_capacity(text.len());
 
         for item in text.split_whitespace() {
@@ -92,21 +93,25 @@ impl TextInterpolator {
                         self.times_recursed += 1;
                         substitution = self.interp(&substitution, map)?;
                     }
-                    substitution =
-                        template_split.prefix.to_owned() + &substitution + template_split.suffix;
+
+                    output.push_str(template_split.prefix);
+                    output.push_str(&substitution);
+                    output.push_str(template_split.suffix);
+                    output.push(' ');
                 }
                 None => {
-                    substitution = item.to_string();
+                    output.push_str(item);
+                    output.push(' ');
                 }
             }
-
-            output.push_str(&substitution);
-            output.push(' ');
         }
 
         self.times_recursed = 0;
 
-        Ok(output.trim().to_string())
+        // Remove trailing space
+        output.pop();
+
+        Ok(output)
     }
 
     pub fn contains_template(&self, text: &str) -> bool {
