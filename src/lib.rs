@@ -5,22 +5,19 @@
 //! To do so it uses modular functions to check if a word in the text is a
 //! template, extract it, and then map it to it's substitute.
 //!
-//! It also supports nested templates requiring recursion to reach a valid substitute. However, it
-//! enforces a strict recursion limit to prevent complex nested structures from infinitely
-//! recursing.
+//! It also supports nested templates requiring recursion to reach a valid substitute.
 
 pub mod defaults;
 
 use core::fmt;
-
-const RECURSION_LIMIT: u8 = 25;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
-pub struct RecursionLimitReachedError;
+pub struct NestedTemplateLoopError;
 
-impl fmt::Display for RecursionLimitReachedError {
+impl fmt::Display for NestedTemplateLoopError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "recursion limit reached")
+        write!(f, "detected looping nested templates")
     }
 }
 
@@ -37,7 +34,7 @@ pub type ExtractTemplateFn = fn(&str) -> TemplateSplit;
 pub struct TextInterpolator {
     pub is_template: IsTemplateFn,
     pub extract_template: ExtractTemplateFn,
-    times_recursed: u8,
+    template_set: HashSet<String>,
 }
 
 impl Default for TextInterpolator {
@@ -55,7 +52,7 @@ impl Default for TextInterpolator {
         TextInterpolator {
             is_template: defaults::is_template,
             extract_template: defaults::extract_template,
-            times_recursed: 0,
+            template_set: HashSet::new(),
         }
     }
 }
@@ -65,7 +62,7 @@ impl TextInterpolator {
         TextInterpolator {
             is_template,
             extract_template,
-            times_recursed: 0,
+            template_set: HashSet::new(),
         }
     }
 
@@ -73,26 +70,29 @@ impl TextInterpolator {
         &mut self,
         text: &str,
         map: &impl Fn(&str) -> Option<String>,
-    ) -> Result<String, RecursionLimitReachedError> {
-        if self.times_recursed >= RECURSION_LIMIT {
-            self.times_recursed = 0;
-            return Err(RecursionLimitReachedError);
-        }
-
+    ) -> Result<String, NestedTemplateLoopError> {
         // String will be at least as long as input
         let mut output = String::with_capacity(text.len());
 
         for item in text.split_whitespace() {
-            let mut substitution: String;
             let template_split = (self.extract_template)(item);
 
             match map(template_split.template) {
                 Some(substitute) => {
-                    substitution = substitute;
+                    if !self
+                        .template_set
+                        .insert(template_split.template.to_string())
+                    {
+                        return Err(NestedTemplateLoopError);
+                    }
+
+                    let mut substitution = substitute;
+
                     if self.contains_template(&substitution) {
-                        self.times_recursed += 1;
                         substitution = self.interp(&substitution, map)?;
                     }
+
+                    self.template_set.remove(template_split.template);
 
                     output.push_str(template_split.prefix);
                     output.push_str(&substitution);
@@ -105,8 +105,6 @@ impl TextInterpolator {
                 }
             }
         }
-
-        self.times_recursed = 0;
 
         // Remove trailing space
         output.pop();
