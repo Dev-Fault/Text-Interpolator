@@ -31,17 +31,30 @@ pub struct TemplateSplit<'a> {
     pub suffix: &'a str,
 }
 
+pub type IsTemplateFn = fn(&str) -> bool;
+pub type ExtractTemplateFn = fn(&str) -> TemplateSplit;
+
 pub struct TextInterpolator {
-    pub is_template: fn(&str) -> bool,
-    pub extract_template: fn(&str) -> TemplateSplit,
+    pub is_template: IsTemplateFn,
+    pub extract_template: ExtractTemplateFn,
     times_recursed: u8,
 }
 
-impl TextInterpolator {
-    pub fn new() -> Self {
+impl Default for TextInterpolator {
+    fn default() -> Self {
         TextInterpolator {
             is_template: defaults::is_template,
             extract_template: defaults::extract_template,
+            times_recursed: 0,
+        }
+    }
+}
+
+impl TextInterpolator {
+    pub fn new(is_template: IsTemplateFn, extract_template: ExtractTemplateFn) -> Self {
+        TextInterpolator {
+            is_template,
+            extract_template,
             times_recursed: 0,
         }
     }
@@ -122,7 +135,7 @@ mod tests {
 
     #[test]
     fn interpolate_non_templated_text() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
 
         let text: String = String::from(
             "This is an example of a basic input with no templates to be substituted.",
@@ -136,7 +149,7 @@ mod tests {
 
     #[test]
     fn interpolate_templated_text() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
 
         let text: String = String::from("A 'adj 'noun will always 'verb in the morning.");
         let interpolated_text = interpolator.interp(&text, &map_template);
@@ -148,7 +161,7 @@ mod tests {
 
     #[test]
     fn interpolate_templated_text_2() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
 
         let text: String = String::from("I'm 'verb'ing on some 'adj 'noun's right now.");
         let interpolated_text = interpolator.interp(&text, &map_template);
@@ -160,7 +173,7 @@ mod tests {
 
     #[test]
     fn interpolated_nested_templated_text() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
 
         let text: String = String::from("'sentence");
         let interpolated_text = interpolator.interp(&text, &map_template);
@@ -171,7 +184,7 @@ mod tests {
 
     #[test]
     fn interpolated_double_nested_templated_text() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
 
         let text: String = String::from("'paragraph");
         let interpolated_text = interpolator.interp(&text, &map_template);
@@ -183,7 +196,7 @@ mod tests {
 
     #[test]
     fn interpolated_double_nested_templated_text_with_prefix_and_suffix() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
 
         let text: String = String::from("My Story:'paragraph...");
 
@@ -196,7 +209,7 @@ mod tests {
 
     #[test]
     fn missing_template() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
 
         let text: String = String::from("'klsfjkaejfaeskfjl");
 
@@ -209,14 +222,14 @@ mod tests {
 
     #[test]
     fn missing_nested_template() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
         let interp_text = interpolator.interp("'nonexistantnest", &map_template);
         dbg!(interp_text.unwrap());
     }
 
     #[test]
     fn infinite_self_recursion() {
-        let mut interpolator = TextInterpolator::new();
+        let mut interpolator = TextInterpolator::default();
 
         let text: String = String::from("'infinite");
 
